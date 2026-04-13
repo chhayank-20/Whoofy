@@ -1,0 +1,79 @@
+# Dockerfile.render
+# Unified image for Next.js (Web) and FastAPI (ML) on Render Free Tier
+
+# --- Stage 1: Next.js Dependencies ---
+FROM node:20-bullseye-slim AS node_deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# --- Stage 2: Next.js Builder ---
+FROM node:20-bullseye-slim AS node_builder
+WORKDIR /app
+COPY --from=node_deps /app/node_modules ./node_modules
+COPY . .
+RUN npx prisma generate
+# Dummy DB for build
+ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
+RUN npm run build
+
+# --- Stage 3: Python Dependencies ---
+FROM python:3.11-slim-bookworm AS python_deps
+WORKDIR /app
+COPY ml/requirements.txt ./ml/
+RUN pip install --no-cache-dir -r ml/requirements.txt
+
+# --- Stage 4: Final Runner ---
+FROM node:20-bullseye-slim AS runner
+WORKDIR /app
+
+# Install System Dependencies (Python, FFmpeg, Tesseract, libgl for OpenCV, PostgreSQL)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    ffmpeg \
+    tesseract-ocr \
+    libgl1 \
+    libglib2.0-0 \
+    postgresql \
+    postgresql-contrib \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user and directories
+RUN useradd -m -u 10001 whoofy && \
+    mkdir -p /app/storage /app/postgres_data && \
+    chown -R whoofy:whoofy /app
+
+# Ensure PostgreSQL bin is in PATH for all users
+ENV PATH="/usr/lib/postgresql/13/bin:$PATH" 
+# Note: Debian Bullseye uses Postgres 13. If Bookworm, it might be 15. 
+# We'll use a more robust way in the script or detect it.
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV PYTHONUNBUFFERED=1
+
+USER whoofy
+
+# Copy Next.js Standalone
+COPY --from=node_builder /app/public ./public
+COPY --from=node_builder /app/.next/standalone ./
+COPY --from=node_builder /app/.next/static ./.next/static
+
+# Copy Python ML Service
+COPY --from=python_deps /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=python_deps /usr/local/bin /usr/local/bin
+COPY ml ./ml
+COPY yolo ./yolo
+
+# Copy Startup Script
+COPY scripts/start-render.sh ./scripts/start-render.sh
+# Note: Permissions might need to be set by root during build
+USER root
+RUN chmod +x ./scripts/start-render.sh && chown whoofy:whoofy ./scripts/start-render.sh
+USER whoofy
+
+EXPOSE 3000
+
+# Start both services
+CMD ["./scripts/start-render.sh"]

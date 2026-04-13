@@ -52,3 +52,4 @@ next-env.d.ts
 # Google service account (contains sensitive credentials)
 google-service-account.json
 *-service-account.json
+gemini-key.json

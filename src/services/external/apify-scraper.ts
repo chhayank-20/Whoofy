@@ -385,8 +385,8 @@ class ApifyScraperClient {
    * Combines results from all APIs for maximum data coverage
    */
   async scrapeReel(reelUrl: string): Promise<ScrapedReel> {
+    const normalizedReelUrl = normalizeReelUrlCanonical(reelUrl) || reelUrl.trim();
     try {
-      const normalizedReelUrl = normalizeReelUrlCanonical(reelUrl) || reelUrl.trim();
       if (!this.isConfigured()) {
         logger.warn('Apify not configured, returning mock scraped data');
         return this.getMockReel(normalizedReelUrl);
