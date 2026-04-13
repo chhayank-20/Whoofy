@@ -1,38 +1,53 @@
 #!/bin/bash
 
-# Start-render.sh
-# Startup script for Whoofy on Render Free Tier (SQLite + ML Edition)
+set -e
 
-# Ensure logs are redirected
-exec > >(tee -a /app/storage/startup.log) 2>&1
+echo "🚀 Starting Whoofy on Render (SQLite + ML Mode)..."
 
-echo "🚀 Starting Whoofy Services (SQLite + Local ML Mode)..."
-echo "📅 Date: $(date)"
-
-# --- 1. SQLite Database Setup ---
-echo "🗄️  Setting up SQLite Database..."
+# --- 1. Database Initialization (SQLite) ---
+echo "📂 Initializing SQLite database..."
 mkdir -p /app/storage
+
+# Initialize the DB if it doesn't exist or just sync the schema
+# We use the flattened schema we generated during build
 export DATABASE_URL="file:/app/storage/whoofy.db"
 
-# Sync schema to SQLite file
-# Use the render-specific schema we built in the Dockerfile
-npx prisma db push --schema prisma/schema.render.prisma --skip-generate --accept-data-loss || echo "⚠️ Prisma sync warning (check logs)."
+echo "🔄 Syncing database schema..."
+# npx prisma db push is lighter than migrate for ephemeral data
+npx prisma db push --schema ./prisma/schema.render.prisma --accept-data-loss --skip-generate
 
-# --- 2. ML Service Setup (YOLO/OCR) ---
-echo "🧠 Starting Local ML Service (YOLO/OCR)..."
-# Now that Postgres is gone, we have the RAM for this.
-/opt/venv/bin/uvicorn ml.app:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 2 &
+# --- 2. Start ML Service (FastAPI / YOLO) ---
+echo "🤖 Starting local ML service (YOLO/OCR)..."
+cd /app/ml
+# Start uvicorn in background
+# We use --workers 1 to save RAM
+python3 -m uvicorn app:app --host 0.0.0.0 --port 8000 --workers 1 &
 ML_PID=$!
-echo "✅ ML Service PID: $ML_PID"
 
-sleep 3
+# Wait for ML service to be ready
+echo "⏳ Waiting for ML service to warm up..."
+max_retries=30
+count=0
+while ! curl -s http://localhost:8000/health > /dev/null; do
+    sleep 2
+    count=$((count + 1))
+    if [ $count -gt $max_retries ]; then
+        echo "⚠️ ML service took too long to start, continuing anyway..."
+        break
+    fi
+done
+echo "✅ ML service ready."
 
-# --- 3. Web Application Setup ---
-echo "🌐 Starting Next.js Web Application..."
-export ML_SERVICE_URL=${ML_SERVICE_URL:-"http://localhost:8000"}
+# --- 3. Start Next.js App ---
+echo "🌐 Starting Next.js application..."
+cd /app
+# Standalone mode: node server.js
+# We use the port Render provides (PORT env var)
+PORT="${PORT:-3000}"
+export PORT=$PORT
 
 # Higher RAM limit for Node since Postgres is gone
 export NODE_OPTIONS="--max-old-space-size=400"
 export HOSTNAME="0.0.0.0"
 
-node server.js
+exec node server.js

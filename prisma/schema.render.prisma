@@ -1,0 +1,708 @@
+generator client {
+  provider        = "prisma-client-js"
+  
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+  
+}
+
+model accounts {
+  id           String       @id
+  userId       String
+  providerId   String
+  providerType String
+  accessToken  String?
+  refreshToken String?
+  expiresAt    DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime
+  users        users        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+}
+
+model admin_config {
+  id                  String   @id
+  maxAutoPayoutAmount Float  @default(10000.00) 
+  minWithdrawalAmount Float  @default(100.00) 
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime
+
+}
+
+model audience_demographics {
+  id                 String          @id
+  socialProfileId    String          @unique
+  topCountries       String?
+  topCities          String?
+  genderDistribution String?
+  ageDistribution    String?
+  lastUpdatedAt      DateTime
+  social_profiles    social_profiles @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+
+}
+
+model audiosync_campaign_details {
+  id           String    @id
+  campaignId   String    @unique
+  songName     String
+  songLanguage String
+  songType     String
+  musicLink    String
+  campaigns    campaigns @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+}
+
+model brand_profiles {
+  id                    String              @id
+  userId                String              @unique
+  companyName           String
+  website               String?
+  contactPersonName     String?
+  contactEmail          String?
+  companyDescription    String?
+  averageCampaignBudget Float?            
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime
+  stripeCustomerId      String?             @unique
+  users                 users               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  custom_categories     custom_categories[] @relation("BrandCustomIndustries")
+  categories            categories[]        @relation("BrandIndustries")
+
+}
+
+model campaign_assignments {
+  id             String                   @id
+  campaignId     String
+  creatorId      String
+  status         String @default("APPLIED")
+  proposedReward Float?                 
+  acceptedReward Float?                 
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime
+  campaigns      campaigns                @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  users          users                    @relation(fields: [creatorId], references: [id])
+
+}
+
+model campaign_comments {
+  id                      String              @id
+  campaignId              String
+  userId                  String
+  content                 String
+  parentId                String?
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime
+  isDeleted               Boolean             @default(false)
+  campaigns               campaigns           @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  campaign_comments       campaign_comments?  @relation("campaign_commentsTocampaign_comments", fields: [parentId], references: [id])
+  other_campaign_comments campaign_comments[] @relation("campaign_commentsTocampaign_comments")
+  users                   users               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+}
+
+model campaign_rules {
+  id                         String             @id
+  campaignId                 String             @unique
+  minFollowerCount           Int?
+  requiredPlatforms          String @default("")
+  requiredCreatorGender      String?
+  requiredNiches             String           @default("")
+  minViewCount               Int?
+  minLikeCount               Int?
+  minCommentCount            Int?
+  requiredHashtags           String           @default("")
+  requiredMentions           String           @default("")
+  requiresAudienceMatch      Boolean            @default(false)
+  requiredAudienceAgeGroup   String?
+  minAudienceMatchPercentage Float?           
+  createdAt                  DateTime           @default(now())
+  updatedAt                  DateTime
+  campaigns                  campaigns          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+}
+
+model campaigns {
+  id                         String                      @id
+  title                      String
+  description                String
+  budget                     Float                     
+  startDate                  DateTime
+  endDate                    DateTime
+  status                     String              @default("Draft")
+  callToAction               String?
+  createdAt                  DateTime                    @default(now())
+  keyPerformanceIndicators   String                    @default("")
+  targetAudience             String?
+  updatedAt                  DateTime
+  brandId                    String
+  platforms                  String
+  sourcePostId               String?
+  type                       String
+  visibility                 String          @default("PUBLIC")
+  audiosync_campaign_details audiosync_campaign_details?
+  campaign_assignments       campaign_assignments[]
+  campaign_comments          campaign_comments[]
+  campaign_rules             campaign_rules?
+  users                      users                       @relation(fields: [brandId], references: [id])
+  instagram_posts            instagram_posts?            @relation(fields: [sourcePostId], references: [id])
+  clipping_campaign_details  clipping_campaign_details?
+  logo_campaign_details      logo_campaign_details?
+  media_assets               media_assets[]
+  payout_requests            payout_requests[]
+  ratings                    ratings[]
+  reel_submissions           reel_submissions[]
+  ugc_campaign_details       ugc_campaign_details?
+  youtube_submissions        youtube_submissions[]
+
+}
+
+model categories {
+  id               String             @id
+  name             String             @unique
+  description      String?
+  type             String
+  iconUrl          String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  brand_profiles   brand_profiles[]   @relation("BrandIndustries")
+  creator_profiles creator_profiles[] @relation("CreatorNiches")
+
+}
+
+model clipping_campaign_details {
+  id                 String    @id
+  campaignId         String    @unique
+  objective          String
+  youtubeChannelName String
+  niche              String
+  campaigns          campaigns @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+}
+
+model creator_payout_accounts {
+  id            String       @id
+  userId        String       @unique
+  type          String
+  upiId         String?
+  accountNumber String?
+  ifsc          String?
+  holderName    String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime
+  commissionId  String?
+  users         users        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+}
+
+model creator_profiles {
+  id                    String              @id
+  userId                String              @unique
+  averageEngagementRate Float?            
+  bio                   String?
+  links                 String            @default("")
+  creatorRating         Float?            
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime
+  users                 users               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment_accounts      payment_accounts[]
+  custom_categories     custom_categories[] @relation("CreatorCustomNiches")
+  categories            categories[]        @relation("CreatorNiches")
+
+}
+
+model custom_categories {
+  id               String             @id
+  name             String
+  description      String?
+  type             String
+  createdByUserId  String
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime
+  users            users              @relation(fields: [createdByUserId], references: [id])
+  brand_profiles   brand_profiles[]   @relation("BrandCustomIndustries")
+  creator_profiles creator_profiles[] @relation("CreatorCustomNiches")
+
+}
+
+model instagram_posts {
+  id                 String          @id
+  socialProfileId    String
+  instagram_media_id String          @unique
+  caption            String?
+  permalink          String
+  mediaType          String
+  mediaUrl           String
+  thumbnailUrl       String?
+  likeCount          Int             @default(0)
+  commentCount       Int             @default(0)
+  createdAt          DateTime
+  viewCount          Int?            @default(0)
+  playCount          Int?            @default(0)
+  shareCount         Int?            @default(0)
+  dimensionsHeight   Int?
+  dimensionsWidth    Int?
+  hashtags           String?
+  isCommentsDisabled Boolean?
+  isSponsored        Boolean?
+  latestComments     String?
+  mentions           String?
+  musicInfo          String?
+  productType        String?
+  shortCode          String?
+  taggedUsers        String?
+  videoDownloadUrl   String?
+  videoDuration      Float?
+  campaigns          campaigns[]
+  social_profiles    social_profiles @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+
+}
+
+model instagram_verifications {
+  id               String   @id
+  userId           String   @unique
+  username         String
+  verificationCode String
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+
+}
+
+model logo_campaign_details {
+  id          String    @id
+  campaignId  String    @unique
+  objective   String
+  companyName String
+  category    String
+  campaigns   campaigns @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+}
+
+model media_assets {
+  id           String     @id
+  campaignId   String?
+  type         String
+  url          String
+  uploadedById String
+  approved     Boolean    @default(false)
+  tags         String   @default("")
+  createdAt    DateTime   @default(now())
+  metadata     String?
+  publicId     String?
+  updatedAt    DateTime
+  campaigns    campaigns? @relation(fields: [campaignId], references: [id])
+  users        users      @relation(fields: [uploadedById], references: [id])
+
+}
+
+model notifications {
+  id          String           @id
+  recipientId String
+  type        String
+  message     String
+  link        String?
+  contextData String?
+  read        Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime
+  users       users            @relation(fields: [recipientId], references: [id])
+
+}
+
+model payment_accounts {
+  id                String           @id
+  creatorId         String
+  providerName      String
+  providerAccountId String           @unique
+  accessToken       String?
+  refreshToken      String?
+  metadata          String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime
+  creator_profiles  creator_profiles @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+}
+
+model payout_requests {
+  id                  String               @id
+  campaignId          String?
+  amount              Float              
+  status              String  @default("Pending")
+  requestedAt         DateTime             @default(now())
+  paidAt              DateTime?
+  approvedAt          DateTime?
+  createdAt           DateTime             @default(now())
+  notes               String?
+  updatedAt           DateTime
+  failedAt            DateTime?
+  fundAccountId       String?
+  method              String
+  payoutId            String?
+  userId              String
+  campaigns           campaigns?           @relation(fields: [campaignId], references: [id])
+  users               users                @relation(fields: [userId], references: [id])
+  wallet_transactions wallet_transactions?
+
+}
+
+model ratings {
+  id                           String     @id
+  raterId                      String
+  rateeId                      String
+  score                        Float    
+  comment                      String?
+  campaignId                   String?
+  createdAt                    DateTime   @default(now())
+  updatedAt                    DateTime
+  campaigns                    campaigns? @relation(fields: [campaignId], references: [id])
+  users_ratings_rateeIdTousers users      @relation("ratings_rateeIdTousers", fields: [rateeId], references: [id])
+  users_ratings_raterIdTousers users      @relation("ratings_raterIdTousers", fields: [raterId], references: [id])
+
+}
+
+model reel_submissions {
+  id                      String                           @id
+  campaignId              String
+  reelUrl                 String
+  submittedAt             DateTime                         @default(now())
+  createdAt               DateTime                         @default(now())
+  feedback                String?
+  performanceMetrics      String?
+  updatedAt               DateTime
+  aiAlignmentReason       String?
+  aiAlignmentStatus       Boolean?
+  aiAnalysisTimestamp     DateTime?
+  reviewStatus            String                 @default("PENDING")
+  creatorId               String
+  view_tracking_snapshots view_tracking_snapshots[]
+  public_view_tracking_snapshots public_view_tracking_snapshots[]
+  campaigns               campaigns                        @relation(fields: [campaignId], references: [id])
+  users                   users                            @relation(fields: [creatorId], references: [id])
+  wallet_transactions     wallet_transactions[]
+
+}
+
+model view_tracking_snapshots {
+  id               String           @id @default(uuid())
+  reelSubmissionId String
+  viewCount        Int              @default(0)
+  likeCount        Int?             @default(0)
+  commentCount     Int?             @default(0)
+  shareCount       Int?             @default(0)
+  snapshotAt       DateTime         @default(now())
+  isSpikeDetected  Boolean          @default(false)
+  spikeReason      String?
+  createdAt        DateTime         @default(now())
+  reelUrl          String?
+  engagementRatio  Float?
+  engagementLabel  String?
+  reel_submissions reel_submissions @relation(fields: [reelSubmissionId], references: [id], onDelete: Cascade)
+
+}
+
+model view_tracking_jobs {
+  id           String    @id @default(uuid())
+  reelUrl      String
+  status       String
+  intervalHours Float    @default(1) // hours between snapshots
+  nextRunAt    DateTime? // when the next snapshot is due (null = not scheduled)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+}
+
+model social_profiles {
+  id                    String                 @id
+  userId                String
+  ownerType             String
+  platform              String
+  username              String
+  provider_profile_id   String                 @unique
+  followerCount         Int                    @default(0)
+  bio                   String?
+  profileImageUrl       String?
+  accessToken           String
+  refreshToken          String?
+  tokenExpiresAt        DateTime?
+  lastSyncAt            DateTime?
+  audience_demographics audience_demographics?
+  instagram_posts       instagram_posts[]
+  users                 users                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  youtube_videos        youtube_videos[]
+
+}
+
+model ugc_campaign_details {
+  id             String    @id
+  campaignId     String    @unique
+  objective      String
+  brandName      String
+  productName    String?
+  serviceName    String?
+  placeName      String?
+  movieTitle     String?
+  campaignTheme  String?
+  awarenessTopic String?
+  category       String
+  campaigns      campaigns @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+}
+
+model users {
+  id                             String                   @id
+  name                           String
+  email                          String                   @unique
+  role                           String
+  profileImage                   String?
+  password                       String?
+  createdAt                      DateTime                 @default(now())
+  updatedAt                      DateTime
+  contactNumber                  String?
+  accounts                       accounts[]
+  brand_profiles                 brand_profiles?
+  campaign_assignments           campaign_assignments[]
+  campaign_comments              campaign_comments[]
+  campaigns                      campaigns[]
+  creator_payout_accounts        creator_payout_accounts?
+  creator_profiles               creator_profiles?
+  custom_categories              custom_categories[]
+  media_assets                   media_assets[]
+  notifications                  notifications[]
+  payout_requests                payout_requests[]
+  ratings_ratings_rateeIdTousers ratings[]                @relation("ratings_rateeIdTousers")
+  ratings_ratings_raterIdTousers ratings[]                @relation("ratings_raterIdTousers")
+  reel_submissions               reel_submissions[]
+  social_profiles                social_profiles[]
+  wallets                        wallets?
+  youtube_submissions            youtube_submissions[]
+
+}
+
+model wallet_transactions {
+  id               String            @id
+  type             String
+  amount           Float           
+  description      String?
+  campaignId       String?
+  reelSubmissionId String?
+  walletId         String
+  createdAt        DateTime          @default(now())
+  payoutRequestId  String?           @unique
+  updatedAt        DateTime
+  payout_requests  payout_requests?  @relation(fields: [payoutRequestId], references: [id])
+  reel_submissions reel_submissions? @relation(fields: [reelSubmissionId], references: [id])
+  wallets          wallets           @relation(fields: [walletId], references: [id])
+
+}
+
+model wallets {
+  id                  String                @id
+  userId              String                @unique
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime
+  availableBalance    Float               @default(0.00) 
+  currency            String                @default("INR")
+  lockedBalance       Float?              @default(0.00) 
+  pendingBalance      Float?              @default(0.00) 
+  wallet_transactions wallet_transactions[]
+  users               users                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+}
+
+model youtube_submissions {
+  id                  String           @id
+  campaignId          String
+  creatorId           String
+  videoUrl            String
+  videoTitle          String?
+  videoDescription    String?
+  videoThumbnail      String?
+  videoId             String?
+  videoDuration       Float?
+  submittedAt         DateTime         @default(now())
+  reviewStatus        String @default("PENDING")
+  feedback            String?
+  performanceMetrics  String?
+  aiAlignmentStatus   String?
+  aiAlignmentReason   String?
+  aiAnalysisTimestamp DateTime?
+  campaigns           campaigns        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  users               users            @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+}
+
+model youtube_verifications {
+  id               String   @id
+  userId           String   @unique
+  username         String
+  verificationCode String
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+
+}
+
+model youtube_videos {
+  id               String          @id
+  socialProfileId  String
+  youtube_media_id String          @unique
+  caption          String?
+  mediaType        String
+  mediaUrl         String
+  thumbnailUrl     String?
+  likeCount        Int             @default(0)
+  commentCount     Int             @default(0)
+  createdAt        DateTime
+  viewCount        Int?            @default(0)
+  playCount        Int?            @default(0)
+  shareCount       Int?            @default(0)
+  videoDuration    Float?
+  dimensionsHeight Int?
+  dimensionsWidth  Int?
+  isSponsored      Boolean?
+  hashtags         String?
+  taggedUsers      String?
+  latestComments   String?
+  social_profiles  social_profiles @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
+
+}
+
+model video_analyses {
+  id                       String                    @id
+  reelUrl                  String
+  reelId                   String?
+  videoId                  String?
+  duration                 Float?
+  frameCount               Int                       @default(0)
+  analysisType             String                    @default("local")
+  status                   String                    @default("processing")
+  errorMessage             String?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime
+  frame_analyses           frame_analyses[]
+  video_analysis_summaries video_analysis_summaries?
+
+}
+
+model frame_analyses {
+  id               String         @id
+  videoAnalysisId  String
+  timestamp        Float
+  framePath        String?
+  objects          String           @default("")
+  labels           String           @default("")
+  text             String?
+  textDetections   String           @default("")
+  logos            String           @default("")
+  brands           String           @default("")
+  people           String           @default("")
+  visualSimilarity String?
+  createdAt        DateTime       @default(now())
+  video_analyses   video_analyses @relation(fields: [videoAnalysisId], references: [id], onDelete: Cascade )
+
+}
+
+model video_analysis_summaries {
+  id                      String         @id
+  videoAnalysisId         String         @unique
+  uniqueObjects           String           @default("")
+  brandsDetected          String           @default("")
+  targetBrandConfirmation String
+  visualSentiment         String
+  visualSimilaritySummary String?
+  createdAt               DateTime       @default(now())
+  updatedAt               DateTime
+  video_analyses          video_analyses @relation(fields: [videoAnalysisId], references: [id], onDelete: Cascade )
+
+}
+
+model sentiment_analyses {
+  id                  String   @id
+  reelUrl             String
+  reelId              String?
+  captionSentiment    String
+  transcriptSentiment String
+  isPositivePublicity Boolean
+  overallReasoning    String
+  processingTimeMs    Int
+  analysisProvider    String   @default("gemini")
+  createdAt           DateTime @default(now())
+
+}
+
+model language_region_analyses {
+  id               String   @id
+  reelUrl          String
+  reelId           String?
+  languages        String     @default("")
+  primaryLanguage  String?
+  regions          String     @default("")
+  primaryRegion    String?
+  analysisProvider String   @default("gemini")
+  processingTimeMs Int
+  createdAt        DateTime @default(now())
+
+}
+
+model comment_analyses {
+  id               String   @id
+  reelUrl          String
+  reelId           String?
+  totalComments    Int      @default(0)
+  comments         String     @default("")
+  engagementRate   Float?
+  averageLikes     Float?
+  averageReplies   Float?
+  positiveComments Int      @default(0)
+  negativeComments Int      @default(0)
+  neutralComments  Int      @default(0)
+  brandMentions    String     @default("")
+  createdAt        DateTime @default(now())
+
+}
+
+model niche_analyses {
+  id               String   @id
+  reelUrl          String?
+  reelId           String?
+  creatorUsername  String?
+  niches           String     @default("")
+  confidence       Float    @default(0.0)
+  reasoning        String
+  processingTimeMs Int
+  analysisProvider String   @default("gemini")
+  createdAt        DateTime @default(now())
+
+}
+
+model engagement_analyses {
+  id                 String    @id
+  reelUrl            String
+  reelId             String?
+  overallAuthentic   Boolean   @default(true)
+  overallScore       Float     @default(1.0)
+  overallIssues      String      @default("")
+  commentAnalysis    String      @default("")
+  engagementAnalysis String      @default("")
+  promotionTimestamp DateTime?
+  processingTimeMs   Int
+  createdAt          DateTime  @default(now())
+
+}
+
+model public_view_tracking_snapshots {
+  id               String           @id
+  reelSubmissionId String
+  viewCount        Int              @default(0)
+  likeCount        Int?             @default(0)
+  commentCount     Int?             @default(0)
+  shareCount       Int?             @default(0)
+  snapshotAt       DateTime         @default(now())
+  isSpikeDetected  Boolean          @default(false)
+  spikeReason      String?
+  createdAt        DateTime         @default(now())
+  reel_submissions reel_submissions @relation(fields: [reelSubmissionId], references: [id], onDelete: Cascade)
+
+}
+
