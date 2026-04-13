@@ -17,7 +17,8 @@ RUN npm run build
 FROM python:3.11-slim-bookworm AS python_deps
 WORKDIR /app
 COPY ml/requirements.txt ./ml/
-RUN pip install --no-cache-dir -r ml/requirements.txt
+# Install to a specific directory we can copy easily
+RUN pip install --no-cache-dir --target=/app/python_packages -r ml/requirements.txt
 
 # --- Stage 3: Final Runner ---
 FROM node:20-bookworm-slim AS runner
@@ -42,6 +43,8 @@ RUN useradd -m -u 10001 whoofy && \
 
 # Ensure PostgreSQL bin is in PATH
 ENV PATH="/usr/lib/postgresql/15/bin:$PATH" 
+# Ensure Python can find our installed packages
+ENV PYTHONPATH="/app/python_packages:$PYTHONPATH"
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -54,9 +57,8 @@ COPY --from=node_builder --chown=whoofy:whoofy /app/public ./public
 COPY --from=node_builder --chown=whoofy:whoofy /app/.next/standalone ./
 COPY --from=node_builder --chown=whoofy:whoofy /app/.next/static ./.next/static
 
-# Copy Python ML Service
-COPY --from=python_deps --chown=whoofy:whoofy /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=python_deps --chown=whoofy:whoofy /usr/local/bin /usr/local/bin
+# Copy Python ML Service and Packages
+COPY --from=python_deps --chown=whoofy:whoofy /app/python_packages ./python_packages
 COPY --chown=whoofy:whoofy ml ./ml
 COPY --chown=whoofy:whoofy yolo ./yolo
 COPY --chown=whoofy:whoofy scripts/start-render.sh ./scripts/start-render.sh
