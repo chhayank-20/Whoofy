@@ -55,7 +55,8 @@ ENV PYTHONUNBUFFERED=1
 USER whoofy
 
 # Copy Next.js Standalone
-COPY --from=node_builder --chown=whoofy:whoofy /app/public ./public
+# Note: public folder is missing in this project structure, skipping
+# COPY --from=node_builder --chown=whoofy:whoofy /app/public ./public
 COPY --from=node_builder --chown=whoofy:whoofy /app/.next/standalone ./
 COPY --from=node_builder --chown=whoofy:whoofy /app/.next/static ./.next/static
 
