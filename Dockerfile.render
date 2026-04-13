@@ -1,6 +1,6 @@
 # Dockerfile.render
 # Unified image for Next.js (Web) and FastAPI (ML) on Render Free Tier
-# Using Debian Bookworm for consistency across Python and Node
+# Using SQLite instead of PostgreSQL to save memory for YOLO/OCR
 
 # --- Stage 1: Next.js Builder ---
 FROM node:20-bookworm-slim AS node_builder
@@ -8,18 +8,21 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
-RUN npx prisma generate
-# Dummy DB for build
-ENV DATABASE_URL=postgresql://build:build@localhost:5432/build
+
+# Convert Prisma schema to SQLite
+RUN chmod +x scripts/convert-prisma-to-sqlite.sh && \
+    ./scripts/convert-prisma-to-sqlite.sh prisma/schema.prisma prisma/schema.render.prisma
+
+# Generate Prisma Client and build
+ENV DATABASE_URL=file:./dev.db
+RUN npx prisma generate --schema prisma/schema.render.prisma
 RUN npm run build
 
 # --- Stage 2: Python Dependencies ---
 FROM python:3.11-slim-bookworm AS python_deps
 WORKDIR /app
-# Install git because CLIP requires it for installation from GitHub
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 COPY ml/requirements.txt ./ml/
-# Use a virtual environment for better isolation and portability
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --no-cache-dir -r ml/requirements.txt
@@ -28,7 +31,8 @@ RUN pip install --no-cache-dir -r ml/requirements.txt
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
 
-# Install System Dependencies (Python, FFmpeg, Tesseract, libgl for OpenCV, PostgreSQL)
+# Install System Dependencies (Python, FFmpeg, Tesseract, libgl for OpenCV)
+# (REMOVED postgresql installation to save RAM)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-venv \
@@ -36,20 +40,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     libgl1 \
     libglib2.0-0 \
-    postgresql \
-    postgresql-contrib \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user and directories
 RUN useradd -m -u 10001 whoofy && \
-    mkdir -p /app/storage /app/postgres_data && \
+    mkdir -p /app/storage && \
     chown -R whoofy:whoofy /app
 
-# Ensure PostgreSQL bin is in PATH
-ENV PATH="/usr/lib/postgresql/15/bin:/opt/venv/bin:$PATH" 
+# Paths
+ENV PATH="/opt/venv/bin:$PATH" 
 
 ENV NODE_ENV=production
-# Render specific bindings
 ENV HOSTNAME="0.0.0.0"
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PYTHONUNBUFFERED=1
@@ -59,6 +60,7 @@ USER whoofy
 # Copy Next.js Standalone and Static Assets
 COPY --from=node_builder --chown=whoofy:whoofy /app/.next/standalone ./
 COPY --from=node_builder --chown=whoofy:whoofy /app/.next/static ./.next/static
+COPY --from=node_builder --chown=whoofy:whoofy /app/prisma/schema.render.prisma ./prisma/schema.render.prisma
 
 # Copy Python Virtual Environment
 COPY --from=python_deps --chown=whoofy:whoofy /opt/venv /opt/venv
