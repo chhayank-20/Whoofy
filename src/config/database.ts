@@ -17,7 +17,8 @@ const JSON_FIELDS = new Set([
   'brandsDetected', 'targetBrandConfirmation', 'visualSentiment', 
   'visualSimilaritySummary', 'captionSentiment', 'transcriptSentiment', 
   'languages', 'regions', 'comments', 'brandMentions', 'niches', 
-  'overallIssues', 'commentAnalysis', 'engagementAnalysis', 'visualSimilarity'
+  'overallIssues', 'commentAnalysis', 'engagementAnalysis', 'visualSimilarity',
+  'platforms', 'niche', 'interests', 'categories', 'requirements'
 ]);
 
 /**
