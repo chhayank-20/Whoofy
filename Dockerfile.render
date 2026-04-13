@@ -49,7 +49,9 @@ RUN useradd -m -u 10001 whoofy && \
 ENV PATH="/usr/lib/postgresql/15/bin:/opt/venv/bin:$PATH" 
 
 ENV NODE_ENV=production
-# REMOVED: ENV PORT=3000 (Let Render provide the PORT variable)
+# Render specific bindings
+ENV HOSTNAME="0.0.0.0"
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV PYTHONUNBUFFERED=1
 
 USER whoofy
