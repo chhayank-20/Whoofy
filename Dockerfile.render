@@ -49,14 +49,12 @@ RUN useradd -m -u 10001 whoofy && \
 ENV PATH="/usr/lib/postgresql/15/bin:/opt/venv/bin:$PATH" 
 
 ENV NODE_ENV=production
-ENV PORT=3000
+# REMOVED: ENV PORT=3000 (Let Render provide the PORT variable)
 ENV PYTHONUNBUFFERED=1
 
 USER whoofy
 
-# Copy Next.js Standalone
-# Note: public folder is missing in this project structure, skipping
-# COPY --from=node_builder --chown=whoofy:whoofy /app/public ./public
+# Copy Next.js Standalone and Static Assets
 COPY --from=node_builder --chown=whoofy:whoofy /app/.next/standalone ./
 COPY --from=node_builder --chown=whoofy:whoofy /app/.next/static ./.next/static
 
@@ -69,8 +67,6 @@ COPY --chown=whoofy:whoofy yolo ./yolo
 COPY --chown=whoofy:whoofy scripts/start-render.sh ./scripts/start-render.sh
 
 RUN chmod +x ./scripts/start-render.sh
-
-EXPOSE 3000
 
 # Start both services
 CMD ["./scripts/start-render.sh"]
