@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Start-render.sh
-# Startup script for Whoofy on Render Free Tier with Internal Postgres
+# Startup script for Whoofy on Render Free Tier with Optimized Internal Postgres
 
-echo "🚀 Starting Whoofy Services..."
+echo "🚀 Starting Whoofy Services (Optimized for 512MB RAM)..."
 
 # --- 1. PostgreSQL Setup (Internal & Ephemeral) ---
-echo "🐘 Setting up Ephemeral PostgreSQL..."
+echo "🐘 Setting up Lean Ephemeral PostgreSQL..."
 
 # Config
 DB_DIR="/app/postgres_data"
@@ -30,9 +30,13 @@ if [ ! -f "$DB_DIR/PG_VERSION" ]; then
     $PG_BIN/initdb -D "$DB_DIR"
 fi
 
-# Start PostgreSQL
-echo "🔌 Starting PostgreSQL server..."
-$PG_BIN/pg_ctl -D "$DB_DIR" -l "$DB_DIR/logfile" -o "-c listen_addresses='' -c shared_buffers=32MB -c max_connections=20" start
+# Start PostgreSQL with Ultra-Lean settings
+echo "🔌 Starting PostgreSQL server (Lean Mode)..."
+# Settings: 
+# - shared_buffers=16MB (Minimum recommended)
+# - max_connections=10 (Low to save memory)
+# - work_mem=1MB (Minimal per-session memory)
+$PG_BIN/pg_ctl -D "$DB_DIR" -l "$DB_DIR/logfile" -o "-c listen_addresses='' -c shared_buffers=16MB -c max_connections=10 -c work_mem=1MB -c temp_buffers=2MB" start
 
 # Wait for Postgres to be ready
 for i in {1..10}; do
@@ -45,24 +49,25 @@ for i in {1..10}; do
 done
 
 # Create User and DB (if they don't exist)
-# Using 'psql -d postgres' initially
-echo "👤 Creating database user '$DB_USER'..."
-$PG_BIN/psql -d postgres -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS' SUPERUSER;" || echo "User already exists"
-echo "📂 Creating database '$DB_NAME'..."
-$PG_BIN/psql -d postgres -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" || echo "Database already exists"
+echo "👤 Configuring internal DB user and schema..."
+$PG_BIN/psql -d postgres -c "CREATE USER $DB_USER WITH PASSWORD '$DB_PASS' SUPERUSER;" || echo "User config skip"
+$PG_BIN/psql -d postgres -c "CREATE DATABASE $DB_NAME OWNER $DB_USER;" || echo "DB config skip"
 
 # --- 2. Database Schema Sync ---
 echo "🗄️  Syncing Prisma schema..."
+# We use --skip-generate because we already generated in build phase
 npx prisma db push --skip-generate
 
 # --- 3. ML Service Setup ---
-echo "🧪 Starting ML Service on port 8000..."
-uvicorn ml.app:app --host 0.0.0.0 --port 8000 --workers 1 &
+echo "🧪 Starting ML Service (1 worker to save RAM)..."
+# Force single worker and limited memory if possible via uvicorn
+uvicorn ml.app:app --host 0.0.0.0 --port 8000 --workers 1 --limit-concurrency 10 &
 ML_PID=$!
 
 sleep 2
 
 # --- 4. Web Application Setup ---
-echo "🌐 Starting Web Application on port 3000..."
+echo "🌐 Starting Next.js Web Application..."
 export ML_SERVICE_URL=${ML_SERVICE_URL:-"http://localhost:8000"}
+# Start node
 node server.js

@@ -8,7 +8,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-render
+  # Force lowercase repository name
+  IMAGE_NAME: ${{ github.repository_owner }}/whoofy-render
 
 jobs:
   build-and-push:
@@ -33,6 +34,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -40,15 +44,13 @@ jobs:
           context: .
           file: ./Dockerfile.render
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          # Use cache-to/from for faster repeated builds
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Trigger Render Deploy
         if: success()
-        # You need to add RENDER_DEPLOY_HOOK_URL to your GitHub Repository Secrets
         env:
           deploy_url: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
         run: |
