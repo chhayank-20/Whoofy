@@ -16,9 +16,13 @@ RUN npm run build
 # --- Stage 2: Python Dependencies ---
 FROM python:3.11-slim-bookworm AS python_deps
 WORKDIR /app
+# Install git because CLIP requires it for installation from GitHub
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 COPY ml/requirements.txt ./ml/
-# Install to a specific directory we can copy easily
-RUN pip install --no-cache-dir --target=/app/python_packages -r ml/requirements.txt
+# Use a virtual environment for better isolation and portability
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --no-cache-dir -r ml/requirements.txt
 
 # --- Stage 3: Final Runner ---
 FROM node:20-bookworm-slim AS runner
@@ -27,7 +31,7 @@ WORKDIR /app
 # Install System Dependencies (Python, FFmpeg, Tesseract, libgl for OpenCV, PostgreSQL)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
-    python3-pip \
+    python3-venv \
     ffmpeg \
     tesseract-ocr \
     libgl1 \
@@ -42,9 +46,7 @@ RUN useradd -m -u 10001 whoofy && \
     chown -R whoofy:whoofy /app
 
 # Ensure PostgreSQL bin is in PATH
-ENV PATH="/usr/lib/postgresql/15/bin:$PATH" 
-# Ensure Python can find our installed packages
-ENV PYTHONPATH="/app/python_packages:$PYTHONPATH"
+ENV PATH="/usr/lib/postgresql/15/bin:/opt/venv/bin:$PATH" 
 
 ENV NODE_ENV=production
 ENV PORT=3000
@@ -57,8 +59,10 @@ COPY --from=node_builder --chown=whoofy:whoofy /app/public ./public
 COPY --from=node_builder --chown=whoofy:whoofy /app/.next/standalone ./
 COPY --from=node_builder --chown=whoofy:whoofy /app/.next/static ./.next/static
 
-# Copy Python ML Service and Packages
-COPY --from=python_deps --chown=whoofy:whoofy /app/python_packages ./python_packages
+# Copy Python Virtual Environment
+COPY --from=python_deps --chown=whoofy:whoofy /opt/venv /opt/venv
+
+# Copy Application Code
 COPY --chown=whoofy:whoofy ml ./ml
 COPY --chown=whoofy:whoofy yolo ./yolo
 COPY --chown=whoofy:whoofy scripts/start-render.sh ./scripts/start-render.sh
