@@ -590,13 +590,13 @@ model frame_analyses {
   videoAnalysisId  String
   timestamp        Float
   framePath        String?
-  objects          String           @default("")
-  labels           String           @default("")
+  objects          String           @default("[]")
+  labels           String           @default("[]")
   text             String?
-  textDetections   String           @default("")
-  logos            String           @default("")
-  brands           String           @default("")
-  people           String           @default("")
+  textDetections   String           @default("[]")
+  logos            String           @default("[]")
+  brands           String           @default("[]")
+  people           String           @default("[]")
   visualSimilarity String?
   createdAt        DateTime       @default(now())
   video_analyses   video_analyses @relation(fields: [videoAnalysisId], references: [id], onDelete: Cascade )
@@ -606,8 +606,8 @@ model frame_analyses {
 model video_analysis_summaries {
   id                      String         @id
   videoAnalysisId         String         @unique
-  uniqueObjects           String           @default("")
-  brandsDetected          String           @default("")
+  uniqueObjects           String           @default("[]")
+  brandsDetected          String           @default("[]")
   targetBrandConfirmation String
   visualSentiment         String
   visualSimilaritySummary String?
@@ -635,9 +635,9 @@ model language_region_analyses {
   id               String   @id
   reelUrl          String
   reelId           String?
-  languages        String     @default("")
+  languages        String     @default("[]")
   primaryLanguage  String?
-  regions          String     @default("")
+  regions          String     @default("[]")
   primaryRegion    String?
   analysisProvider String   @default("gemini")
   processingTimeMs Int
@@ -650,14 +650,14 @@ model comment_analyses {
   reelUrl          String
   reelId           String?
   totalComments    Int      @default(0)
-  comments         String     @default("")
+  comments         String     @default("[]")
   engagementRate   Float?
   averageLikes     Float?
   averageReplies   Float?
   positiveComments Int      @default(0)
   negativeComments Int      @default(0)
   neutralComments  Int      @default(0)
-  brandMentions    String     @default("")
+  brandMentions    String     @default("[]")
   createdAt        DateTime @default(now())
 
 }
@@ -667,7 +667,7 @@ model niche_analyses {
   reelUrl          String?
   reelId           String?
   creatorUsername  String?
-  niches           String     @default("")
+  niches           String     @default("[]")
   confidence       Float    @default(0.0)
   reasoning        String
   processingTimeMs Int
@@ -682,9 +682,9 @@ model engagement_analyses {
   reelId             String?
   overallAuthentic   Boolean   @default(true)
   overallScore       Float     @default(1.0)
-  overallIssues      String      @default("")
-  commentAnalysis    String      @default("")
-  engagementAnalysis String      @default("")
+  overallIssues      String      @default("[]")
+  commentAnalysis    String      @default("{}")
+  engagementAnalysis String      @default("{}")
   promotionTimestamp DateTime?
   processingTimeMs   Int
   createdAt          DateTime  @default(now())

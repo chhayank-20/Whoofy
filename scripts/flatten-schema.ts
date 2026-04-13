@@ -57,17 +57,26 @@ const processedLines = lines.map(line => {
     processed = processed.replace(/\(\d+,\s*\d+\)/g, '');
   }
   
-  // Convert String[] to String (SQLite doesn't support scalar lists)
-  // Handle the default([]) simultaneously
-  if (processed.includes('String[]')) {
-    processed = processed.replace(/\sString\[\](\s|@|$)/g, (match) => match.replace('String[]', 'String'));
-    processed = processed.replace(/@default\(\[\]\)/g, '@default("")');
-  }
+  // Strip PostgreSQL-specific multi-column unique/index constraints 
+  // but KEEP individual field @unique
+  processed = processed.replace(/@@unique\(\[.*?\]\)/g, '');
+  processed = processed.replace(/@@index\(\[.*?\]\)/g, '');
+  
+  // Convert SCALAR arrays only (String[], Int[], etc.) to String
+  // Relation arrays (Model[]) should remain arrays
+  const scalarTypes = ['String', 'Int', 'Float', 'Boolean', 'DateTime', 'Json'];
+  scalarTypes.forEach(type => {
+    const regex = new RegExp(`\\s${type}\\[\\]`, 'g');
+    processed = processed.replace(regex, ' String');
+  });
 
-  // Convert Json to String (SQLite doesn't support native Json type in Prisma)
+  // Convert Json to String
   processed = processed.replace(/\sJson(\s|\?|$|@)/g, (match) => match.replace('Json', 'String'));
-  processed = processed.replace(/@default\("\[\]"\)/g, '@default("")');
-  processed = processed.replace(/@default\("\{\}"\)/g, '@default("")');
+  
+  // Handle defaults for converted types
+  processed = processed.replace(/@default\(\[\]\)/g, '@default("")');
+  processed = processed.replace(/@default\("\[\]"\)/g, '@default("[]")');
+  processed = processed.replace(/@default\("\{\}"\)/g, '@default("{}")');
   
   processed = processed.replace(/@db\.[A-Za-z]+/g, '');
   processed = processed.replace(/map: *".*?"/g, '');
