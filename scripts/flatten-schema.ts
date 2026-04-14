@@ -18,143 +18,107 @@ schema = schema.replace(/provider *= *"postgresql"/, 'provider = "sqlite"');
 schema = schema.replace(/previewFeatures *= *\["multiSchema"\]/, '');
 schema = schema.replace(/schemas *= *\[.*?\]/, '');
 
+// Normalize @default(now) -> @default(now()) (some schemas omit the parens)
+schema = schema.replace(/@default\(now\)/g, '@default(now())');
+// Normalize @default(dbgenerated()) -> remove (unsupported in SQLite context)
+schema = schema.replace(/@default\(dbgenerated\(.*?\)\)/g, '');
+
+
 // 2. Remove all @@schema attributes
 schema = schema.replace(/@@schema\(.*?\)/g, '');
 
-// 3. Remove multi-line enum blocks (SQLite/Prisma doesn't support them)
-// We capture them first to replace their types later
-const enumMatches = schema.matchAll(/enum (\w+) \{([\s\S]*?)\}/g);
+// 3. Extract enum names then remove all enum blocks
+//    (Prisma SQLite does not support enums)
 const enumNames: string[] = [];
-for (const match of enumMatches) {
+for (const match of schema.matchAll(/enum (\w+) \{[\s\S]*?\}/g)) {
   enumNames.push(match[1]);
 }
-
 console.log(`🔡 Found enums: ${enumNames.join(', ')}`);
-
-// Clear enum blocks
 schema = schema.replace(/enum \w+ \{[\s\S]*?\}/g, '');
 
-// 4. Transform field types
-const lines = schema.split('\n');
-const processedLines = lines.map(line => {
+// 4. Process line-by-line transformations
+const flattenedFields: string[] = [];
+
+const processedLines = schema.split('\n').map(line => {
   let processed = line;
 
-  // Convert Enum types to String
+  // 4a. Convert all Enum types to String (both scalar and array)
   for (const enumName of enumNames) {
-    const enumRegex = new RegExp(`(\\s)${enumName}(\\s|\\?|\\[\\]|$)`, 'g');
-    if (enumRegex.test(processed)) {
-      processed = processed.replace(enumRegex, (match, p1, p2) => {
-        if (match.includes('[]')) return `${p1}String${p2}`;
-        return `${p1}String${p2}`;
-      });
-    }
+    // Match: <space>EnumName<optional []><space|?|end>
+    const enumRegex = new RegExp(`(\\s)${enumName}(\\[\\])?(\\s|\\?|$)`, 'g');
+    processed = processed.replace(enumRegex, (match, p1, arr, p3) => {
+      if (arr) flattenedFields.push(line.match(/^\s+(\w+)\s+/)?.[1] ?? '');
+      return `${p1}String${p3}`;
+    });
   }
 
-  // Convert Decimal to Float and remove precision like (12, 2)
-  processed = processed.replace(/\sDecimal(\s|\?|$|@)/g, (match) => match.replace('Decimal', 'Float'));
-  // Strip (12, 2) or (3, 2) that might be left on the same line
+  // 4b. Convert Decimal to Float and strip precision args like (10, 2)
+  //     Also track the field name so the type patcher converts it to 'any'
+  const decimalMatch = processed.match(/^\s+(\w+)\s+Decimal/);
+  if (decimalMatch) flattenedFields.push(decimalMatch[1]);
+  processed = processed.replace(/\sDecimal(\s|\?|$|@)/g, m => m.replace('Decimal', 'Float'));
   if (processed.includes('Float')) {
     processed = processed.replace(/\(\d+,\s*\d+\)/g, '');
   }
-  
-  // Strip PostgreSQL-specific multi-column unique/index constraints 
-  // but KEEP individual field @unique
-  processed = processed.replace(/@@unique\(\[.*?\]\)/g, '');
-  processed = processed.replace(/@@index\(\[.*?\]\)/g, '');
-  
-  // Convert SCALAR arrays only (Type[]) to String
-  // Relation arrays (Model[]) should remain arrays
-  // We identify scalar arrays by checking if the type is a known scalar or an Enum
-  const lines = processed.split('\n');
-  const flattenedFields: string[] = [];
-  
-  const processedLines = lines.map(line => {
-    // Match: fieldName Type[] or fieldName Type[] @default(...)
-    const arrayMatch = line.match(/^\s+(\w+)\s+(\w+)\[\]/);
-    if (arrayMatch) {
-      const fieldName = arrayMatch[1];
-      const typeName = arrayMatch[2];
-      
-      // If it's NOT a relation (we'll check against known model names or manually skip if it's capitalized)
-      // Actually, in this project, relations are Model[] and scalars/enums are also Capitalized or Enum[]
-      // The best way is to check if it has @relation - if NOT, it's likely a scalar/enum array.
-      if (!line.includes('@relation')) {
-        flattenedFields.push(fieldName);
-        return line.replace(`${typeName}[]`, 'String');
-      }
-    }
-    return line;
-  });
-  processed = processedLines.join('\n');
 
-  // Convert Json to String
-  const jsonLines = processed.split('\n');
-  const processedJsonLines = jsonLines.map(line => {
-    // Match: fieldName Json or fieldName Json?
-    const jsonMatch = line.match(/^\s+(\w+)\s+Json/);
-    if (jsonMatch) {
-      flattenedFields.push(jsonMatch[1]);
-      return line.replace('Json', 'String');
-    }
-    return line;
-  });
-  processed = processedJsonLines.join('\n');
-  
-  // Handle defaults for converted types
+
+  // 4c. Convert scalar String[], Int[], Float[], Boolean[], DateTime[] to String
+  //     Skip lines with @relation (those are relation arrays, keep them)
+  const scalarArrayMatch = processed.match(/^\s+(\w+)\s+(String|Int|Float|Boolean|DateTime)\[\]/);
+  if (scalarArrayMatch && !processed.includes('@relation')) {
+    flattenedFields.push(scalarArrayMatch[1]);
+    processed = processed.replace(`${scalarArrayMatch[2]}[]`, 'String');
+  }
+
+  // 4d. Convert Json fields to String
+  //     Match: <whitespace>fieldName   Json  (with optional ? and @default)
+  const jsonMatch = processed.match(/^\s+(\w+)\s+Json(\?|\s|$)/);
+  if (jsonMatch) {
+    flattenedFields.push(jsonMatch[1]);
+    processed = processed.replace(/\bJson\b/, 'String');
+  }
+
+  // 4e. Strip PostgreSQL-specific attributes
+  processed = processed.replace(/@db\.[A-Za-z]+(\(\d+(,\s*\d+)?\))?/g, '');
+  processed = processed.replace(/map:\s*".*?"/g, '');
+  processed = processed.replace(/@@map\(.*?\)/g, '');
+  // Strip @@index and @@unique lines entirely (not just the content)
+  // We blank the whole line to avoid trailing commas
+  if (/^\s*@@index\s*\(/.test(processed) || /^\s*@@unique\s*\(/.test(processed)) {
+    return '';
+  }
+
+  // 4f. Fix @default([]) -> @default("") for now-String fields
   processed = processed.replace(/@default\(\[\]\)/g, '@default("")');
-  
-  // Save a list of flattened fields for the patcher (as a comment at top)
-  const flattenedList = Array.from(new Set(flattenedFields)).join(',');
-  processed = `// @@flattened:${flattenedList}\n` + processed;
-  
-  processed = processed.replace(/@db\.[A-Za-z]+/g, '');
-  processed = processed.replace(/map: *".*?"/g, '');
-  processed = processed.replace(/@@map\(.*?\)/g, ''); // Strip model mapping
 
-  // Strip all @@index and @@unique (except primary keys) to avoid collisions in flattened schema
-  if (processed.includes('@@index') || processed.includes('@@unique')) {
-    processed = ''; // Delete the line if it represents a complex index/unique that might collide
-  }
-
-  // NEW: Clean up trailing commas left by previous removals (e.g., [field], )
-  // We do this globally on the full schema later for multi-line cases, but let's try line-by-line first
-  processed = processed.replace(/,[[:space:]]*\)/g, ')');
-  // Clean up empty parentheses
-  processed = processed.replace(/\([[:space:]]*\)/g, '');
-
-  // 6. Fix default values for converted strings
-  // @default(APPLIED) -> @default("APPLIED")
-  if (processed.includes('@default(')) {
-    processed = processed.replace(/@default\(([A-Za-z][A-Za-z0-9_]*)\)/g, (match, p1) => {
-      // Don't quote special prisma functions or booleans
-      if (['now', 'uuid', 'autoincrement', 'true', 'false', 'dbgenerated'].includes(p1.toLowerCase())) {
-        return match;
-      }
-      return `@default("${p1}")`;
-    });
-  }
+  // 4g. Fix enum-valued @default(SOME_VALUE) -> @default("SOME_VALUE")
+  //     but skip prisma-special functions: now, uuid, autoincrement, cuid, etc.
+  const prismaFns = new Set(['now', 'uuid', 'autoincrement', 'cuid', 'true', 'false', 'dbgenerated', '""', '[]', '{}']);
+  processed = processed.replace(/@default\(([A-Za-z][A-Za-z0-9_]*)\)/g, (match, val) => {
+    if (prismaFns.has(val.toLowerCase())) return match;
+    return `@default("${val}")`;
+  });
 
   return processed;
 });
 
 let finalSchema = processedLines.join('\n');
 
-// 7. FINAL GLOBAL CLEANUP (Multi-line safe)
-// Targeted: Remove trailing commas in attributes like @relation(...) or @@index(...)
-finalSchema = finalSchema.replace(/(@+[a-zA-Z]+)\(([\s\S]*?),(\s*)\)/g, '$1($2$3)');
-// Clean up empty parentheses ONLY if they were left inside an attribute (rare)
-// but let's just NOT do a global parenthesis cleanup to be safe for now()
+// 5. Global cleanup
+// Remove trailing commas inside attribute parentheses left by map: stripping
+// e.g. @relation(..., onDelete: Cascade, ) -> @relation(..., onDelete: Cascade)
+finalSchema = finalSchema.replace(/,\s*\)/g, ')');
 
-// Clean up double empty lines
-finalSchema = finalSchema.replace(/\n\s*\n\s*\n/g, '\n\n');
+// Remove empty/repeated blank lines
+finalSchema = finalSchema.replace(/\n{3,}/g, '\n\n');
 
-// Debug a known problematic index area
-const debugStart = finalSchema.indexOf('@@index([createdAt]');
-if (debugStart !== -1) {
-  console.log('--- DEBUG INDEX AREA ---');
-  console.log(finalSchema.substring(debugStart, debugStart + 200));
-  console.log('------------------------');
-}
 
-fs.writeFileSync(outputPath, finalSchema);
+
+// 6. Write the flattened field list as a comment on the FIRST line of the output
+//    This is read by patch-prisma-types.sh to know which fields to patch
+const uniqueFlattened = [...new Set(flattenedFields.filter(f => f.length > 0))];
+console.log(`📋 Flattened ${uniqueFlattened.length} fields: ${uniqueFlattened.join(', ')}`);
+const header = `// @@flattened:${uniqueFlattened.join(',')}\n`;
+
+fs.writeFileSync(outputPath, header + finalSchema);
 console.log('✅ Flattened schema generated.');

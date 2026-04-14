@@ -1,3 +1,4 @@
+// @@flattened:maxAutoPayoutAmount,minWithdrawalAmount,topCountries,topCities,genderDistribution,ageDistribution,averageCampaignBudget,proposedReward,acceptedReward,requiredPlatforms,requiredNiches,requiredHashtags,requiredMentions,minAudienceMatchPercentage,budget,keyPerformanceIndicators,platforms,averageEngagementRate,links,creatorRating,latestComments,musicInfo,taggedUsers,tags,metadata,contextData,amount,score,performanceMetrics,availableBalance,lockedBalance,pendingBalance,objects,labels,textDetections,logos,brands,people,visualSimilarity,uniqueObjects,brandsDetected,targetBrandConfirmation,visualSentiment,visualSimilaritySummary,captionSentiment,transcriptSentiment,languages,regions,comments,brandMentions,niches,overallIssues,commentAnalysis,engagementAnalysis
 generator client {
   provider        = "prisma-client-js"
   
@@ -21,6 +22,7 @@ model accounts {
   updatedAt    DateTime
   users        users        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model admin_config {
@@ -30,6 +32,7 @@ model admin_config {
   createdAt           DateTime @default(now())
   updatedAt           DateTime
 
+  
 }
 
 model audience_demographics {
@@ -42,6 +45,7 @@ model audience_demographics {
   lastUpdatedAt      DateTime
   social_profiles    social_profiles @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model audiosync_campaign_details {
@@ -53,6 +57,7 @@ model audiosync_campaign_details {
   musicLink    String
   campaigns    campaigns @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model brand_profiles {
@@ -71,6 +76,7 @@ model brand_profiles {
   custom_categories     custom_categories[] @relation("BrandCustomIndustries")
   categories            categories[]        @relation("BrandIndustries")
 
+  
 }
 
 model campaign_assignments {
@@ -85,6 +91,7 @@ model campaign_assignments {
   campaigns      campaigns                @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   users          users                    @relation(fields: [creatorId], references: [id])
 
+  
 }
 
 model campaign_comments {
@@ -101,6 +108,7 @@ model campaign_comments {
   other_campaign_comments campaign_comments[] @relation("campaign_commentsTocampaign_comments")
   users                   users               @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model campaign_rules {
@@ -122,6 +130,7 @@ model campaign_rules {
   updatedAt                  DateTime
   campaigns                  campaigns          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model campaigns {
@@ -157,6 +166,7 @@ model campaigns {
   ugc_campaign_details       ugc_campaign_details?
   youtube_submissions        youtube_submissions[]
 
+  
 }
 
 model categories {
@@ -170,6 +180,7 @@ model categories {
   brand_profiles   brand_profiles[]   @relation("BrandIndustries")
   creator_profiles creator_profiles[] @relation("CreatorNiches")
 
+  
 }
 
 model clipping_campaign_details {
@@ -180,6 +191,7 @@ model clipping_campaign_details {
   niche              String
   campaigns          campaigns @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model creator_payout_accounts {
@@ -195,6 +207,7 @@ model creator_payout_accounts {
   commissionId  String?
   users         users        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model creator_profiles {
@@ -211,6 +224,7 @@ model creator_profiles {
   custom_categories     custom_categories[] @relation("CreatorCustomNiches")
   categories            categories[]        @relation("CreatorNiches")
 
+  
 }
 
 model custom_categories {
@@ -225,6 +239,7 @@ model custom_categories {
   brand_profiles   brand_profiles[]   @relation("BrandCustomIndustries")
   creator_profiles creator_profiles[] @relation("CreatorCustomNiches")
 
+  
 }
 
 model instagram_posts {
@@ -258,6 +273,7 @@ model instagram_posts {
   campaigns          campaigns[]
   social_profiles    social_profiles @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model instagram_verifications {
@@ -268,6 +284,7 @@ model instagram_verifications {
   createdAt        DateTime @default(now())
   expiresAt        DateTime
 
+  
 }
 
 model logo_campaign_details {
@@ -278,6 +295,7 @@ model logo_campaign_details {
   category    String
   campaigns   campaigns @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model media_assets {
@@ -295,6 +313,7 @@ model media_assets {
   campaigns    campaigns? @relation(fields: [campaignId], references: [id])
   users        users      @relation(fields: [uploadedById], references: [id])
 
+  
 }
 
 model notifications {
@@ -309,6 +328,7 @@ model notifications {
   updatedAt   DateTime
   users       users            @relation(fields: [recipientId], references: [id])
 
+  
 }
 
 model payment_accounts {
@@ -323,6 +343,7 @@ model payment_accounts {
   updatedAt         DateTime
   creator_profiles  creator_profiles @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model payout_requests {
@@ -345,6 +366,7 @@ model payout_requests {
   users               users                @relation(fields: [userId], references: [id])
   wallet_transactions wallet_transactions?
 
+  
 }
 
 model ratings {
@@ -360,6 +382,7 @@ model ratings {
   users_ratings_rateeIdTousers users      @relation("ratings_rateeIdTousers", fields: [rateeId], references: [id])
   users_ratings_raterIdTousers users      @relation("ratings_raterIdTousers", fields: [raterId], references: [id])
 
+  
 }
 
 model reel_submissions {
@@ -382,6 +405,7 @@ model reel_submissions {
   users                   users                            @relation(fields: [creatorId], references: [id])
   wallet_transactions     wallet_transactions[]
 
+  
 }
 
 model view_tracking_snapshots {
@@ -400,6 +424,7 @@ model view_tracking_snapshots {
   engagementLabel  String?
   reel_submissions reel_submissions @relation(fields: [reelSubmissionId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model view_tracking_jobs {
@@ -411,6 +436,7 @@ model view_tracking_jobs {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  
 }
 
 model social_profiles {
@@ -432,6 +458,7 @@ model social_profiles {
   users                 users                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   youtube_videos        youtube_videos[]
 
+  
 }
 
 model ugc_campaign_details {
@@ -448,6 +475,7 @@ model ugc_campaign_details {
   category       String
   campaigns      campaigns @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model users {
@@ -478,6 +506,7 @@ model users {
   wallets                        wallets?
   youtube_submissions            youtube_submissions[]
 
+  
 }
 
 model wallet_transactions {
@@ -495,6 +524,7 @@ model wallet_transactions {
   reel_submissions reel_submissions? @relation(fields: [reelSubmissionId], references: [id])
   wallets          wallets           @relation(fields: [walletId], references: [id])
 
+  
 }
 
 model wallets {
@@ -509,6 +539,7 @@ model wallets {
   wallet_transactions wallet_transactions[]
   users               users                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model youtube_submissions {
@@ -531,6 +562,7 @@ model youtube_submissions {
   campaigns           campaigns        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
   users               users            @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model youtube_verifications {
@@ -541,6 +573,7 @@ model youtube_verifications {
   createdAt        DateTime @default(now())
   expiresAt        DateTime
 
+  
 }
 
 model youtube_videos {
@@ -566,6 +599,7 @@ model youtube_videos {
   latestComments   String?
   social_profiles  social_profiles @relation(fields: [socialProfileId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model video_analyses {
@@ -583,6 +617,7 @@ model video_analyses {
   frame_analyses           frame_analyses[]
   video_analysis_summaries video_analysis_summaries?
 
+  
 }
 
 model frame_analyses {
@@ -599,8 +634,9 @@ model frame_analyses {
   people           String           @default("[]")
   visualSimilarity String?
   createdAt        DateTime       @default(now())
-  video_analyses   video_analyses @relation(fields: [videoAnalysisId], references: [id], onDelete: Cascade )
+  video_analyses   video_analyses @relation(fields: [videoAnalysisId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model video_analysis_summaries {
@@ -613,8 +649,9 @@ model video_analysis_summaries {
   visualSimilaritySummary String?
   createdAt               DateTime       @default(now())
   updatedAt               DateTime
-  video_analyses          video_analyses @relation(fields: [videoAnalysisId], references: [id], onDelete: Cascade )
+  video_analyses          video_analyses @relation(fields: [videoAnalysisId], references: [id], onDelete: Cascade)
 
+  
 }
 
 model sentiment_analyses {
@@ -629,6 +666,7 @@ model sentiment_analyses {
   analysisProvider    String   @default("gemini")
   createdAt           DateTime @default(now())
 
+  
 }
 
 model language_region_analyses {
@@ -643,6 +681,7 @@ model language_region_analyses {
   processingTimeMs Int
   createdAt        DateTime @default(now())
 
+  
 }
 
 model comment_analyses {
@@ -660,6 +699,7 @@ model comment_analyses {
   brandMentions    String     @default("[]")
   createdAt        DateTime @default(now())
 
+  
 }
 
 model niche_analyses {
@@ -674,6 +714,7 @@ model niche_analyses {
   analysisProvider String   @default("gemini")
   createdAt        DateTime @default(now())
 
+  
 }
 
 model engagement_analyses {
@@ -689,6 +730,7 @@ model engagement_analyses {
   processingTimeMs   Int
   createdAt          DateTime  @default(now())
 
+  
 }
 
 model public_view_tracking_snapshots {
@@ -704,5 +746,7 @@ model public_view_tracking_snapshots {
   createdAt        DateTime         @default(now())
   reel_submissions reel_submissions @relation(fields: [reelSubmissionId], references: [id], onDelete: Cascade)
 
+  
+  
 }
 

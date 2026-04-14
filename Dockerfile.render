@@ -1,72 +1,81 @@
 # Dockerfile.render
-# Unified image for Next.js (Web) and FastAPI (ML) on Render Free Tier
-# Using SQLite instead of PostgreSQL to save memory for YOLO/OCR
+# Two-stage build: Node.js builder + Python runtime with Node.js installed
+# Uses SQLite to stay within Render Free Tier 512MB RAM limit
 
-# --- Stage 1: Next.js Builder ---
+# =============================================================================
+# Stage 1: Node.js builder — builds Next.js app
+# =============================================================================
 FROM node:20-bookworm-slim AS node_builder
 WORKDIR /app
+
+# Install deps
 COPY package*.json ./
 RUN npm ci
+
+# Copy all source
 COPY . .
+
+# Generate Prisma client for SQLite
 ENV DATABASE_URL=file:./dev.db
 RUN npx prisma generate --schema prisma/schema.render.prisma
-# Dynamic type patching for SQLite
+
+# Patch TypeScript types so build succeeds with SQLite string fields
 RUN chmod +x scripts/patch-prisma-types.sh && ./scripts/patch-prisma-types.sh
+
+# Build Next.js in standalone mode
 RUN npm run build
 
-# --- Stage 2: Final Runtime Image ---
+# =============================================================================
+# Stage 2: Final runtime — Python base + Node.js installed on top
+# =============================================================================
 FROM python:3.10-slim-bookworm
 
-# Install Node.js 20 & Runtime Deps
-RUN apt-get update && apt-get install -y \
+# Install Node.js 20 and system libraries needed by OpenCV / Tesseract
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
     libgl1-mesa-glx \
     libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
     tesseract-ocr \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs \
+    && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Copy Next.js Build
-COPY --from=node_builder /app/package*.json ./
-COPY --from=node_builder /app/.next ./.next
-COPY --from=node_builder /app/public ./public
-COPY --from=node_builder /app/node_modules ./node_modules
-COPY --from=node_builder /app/prisma ./prisma
-COPY --from=node_builder /app/scripts ./scripts
-COPY --from=node_builder /app/server.js ./server.js
+# --- Python ML dependencies (CPU-only) ---
+COPY ml/requirements.txt ./ml/requirements.txt
+RUN pip install --no-cache-dir -r ./ml/requirements.txt
 
-# Install Python ML Deps (CPU Only)
-COPY ml/requirements.txt ./ml/
-RUN pip install --no-cache-dir -r ml/requirements.txt
+# --- Copy ML source ---
 COPY ml/ ./ml/
 
-# Create storage directory for SQLite
-RUN mkdir -p /app/storage
-
-# Env vars
-ENV NODE_ENV=production
-ENV DATABASE_URL=file:/app/storage/whoofy.db
-ENV ML_SERVICE_URL=http://localhost:8000
-ENV PORT=3000
-ENV PYTHONUNBUFFERED=1
-
+# --- Copy Next.js standalone build output ---
+# Next.js standalone mode puts everything needed to run in .next/standalone/
 COPY --from=node_builder /app/.next/standalone ./
 COPY --from=node_builder /app/.next/static ./.next/static
 COPY --from=node_builder /app/public ./public
-COPY --from=node_builder /app/prisma/schema.render.prisma ./prisma/schema.render.prisma
 
-# Copy ML app and packages
-COPY --from=python_builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
-COPY --from=python_builder /app /app/ml
+# --- Copy Prisma schema & scripts needed at runtime ---
+COPY --from=node_builder /app/prisma ./prisma
+COPY --from=node_builder /app/scripts/start-render.sh ./scripts/start-render.sh
+COPY --from=node_builder /app/scripts/flatten-schema.ts ./scripts/flatten-schema.ts
+COPY --from=node_builder /app/node_modules ./node_modules
 
-# Copy scripts
-COPY scripts/start-render.sh ./scripts/start-render.sh
-COPY scripts/flatten-schema.ts ./scripts/flatten-schema.ts
-RUN chmod +x ./scripts/start-render.sh
+# Make startup script executable and create storage dir
+RUN chmod +x ./scripts/start-render.sh && mkdir -p /app/storage
+
+# Environment variables
+ENV NODE_ENV=production
+ENV PYTHONUNBUFFERED=1
+ENV DATABASE_URL=file:/app/storage/whoofy.db
+ENV ML_SERVICE_URL=http://localhost:8000
+ENV NODE_OPTIONS=--max-old-space-size=350
+ENV HOSTNAME=0.0.0.0
 
 EXPOSE 3000
+
 CMD ["./scripts/start-render.sh"]

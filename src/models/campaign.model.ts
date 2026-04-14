@@ -1,5 +1,5 @@
 import prisma from '@/config/database';
-import { Decimal } from '@prisma/client/runtime/library';
+
 import { v4 as uuidv4 } from 'uuid';
 import {
   Campaign,
@@ -28,7 +28,8 @@ export const CampaignModel = {
           brandId: data.brandId,
           title: data.title,
           description: data.description ?? '',
-          budget: new Decimal(0),
+          budget: 0,
+
           startDate:
             typeof data.startDate === 'string'
               ? new Date(data.startDate)
@@ -38,7 +39,7 @@ export const CampaignModel = {
               ? new Date(data.endDate)
               : data.endDate,
           type: 'UGC',
-          platforms: [],
+          platforms: '[]',
           updatedAt: now,
         },
       });
