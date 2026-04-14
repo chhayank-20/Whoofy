@@ -15,9 +15,13 @@ RUN npm ci
 # Copy all source
 COPY . .
 
+# Flatten schema from PostgreSQL to SQLite (generates prisma/schema.render.prisma)
+RUN npx tsx scripts/flatten-schema.ts prisma/schema.prisma prisma/schema.render.prisma
+
 # Generate Prisma client for SQLite
 ENV DATABASE_URL=file:./dev.db
 RUN npx prisma generate --schema prisma/schema.render.prisma
+
 
 # Patch TypeScript types so build succeeds with SQLite string fields
 RUN chmod +x scripts/patch-prisma-types.sh && ./scripts/patch-prisma-types.sh
@@ -34,15 +38,18 @@ FROM python:3.10-slim-bookworm
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
+    git \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender-dev \
+    libgomp1 \
     tesseract-ocr \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 
 WORKDIR /app
 

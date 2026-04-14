@@ -1,25 +1,43 @@
-# Force CPU-only binaries to save RAM/Disk on Render
---extra-index-url https://download.pytorch.org/whl/cpu
+# ============================================================
+# Whoofy ML Service - Render Free Tier (CPU-only)
+# ============================================================
+#
+# IMPORTANT: PyTorch CPU wheels must be listed BEFORE ultralytics
+# so that ultralytics does not re-pull the GPU version.
+# The --extra-index-url is checked AFTER pypi.org by default,
+# so we pin exact CPU wheel versions here.
+#
+# The CPU wheel naming convention is: torch==X.Y.Z+cpu
+# but pip install syntax uses: torch==X.Y.Z --extra-index-url ...
+# We use --index-url to force CPU-only resolution entirely.
 
+--index-url https://download.pytorch.org/whl/cpu
+--extra-index-url https://pypi.org/simple
+
+# Web framework
 fastapi==0.115.8
 uvicorn[standard]==0.34.0
 
-# Pin NumPy to 1.x so PyTorch / Ultralytics
-# C-extensions are compiled against a compatible version.
+# Numeric - pin to 1.x for ABI compatibility with ultralytics C extensions
 numpy==1.26.4
 
-# Core OCR + YOLO deps
-ultralytics>=8.0.0
+# Core vision - headless OpenCV avoids GTK/display dependencies
 opencv-python-headless>=4.8.0
-pytesseract>=0.3.10
 pillow>=10.0.0
 
-# CLIP deps (using CPU-only torch)
-torch>=2.1.2+cpu
-torchvision>=0.16.2+cpu
+# OCR
+pytesseract>=0.3.10
+
+# YOLO - will use the torch already installed above (CPU)
+ultralytics>=8.0.0
+
+# CLIP - installed via git (git is now available in the image)
 ftfy>=6.0.0
 git+https://github.com/openai/CLIP.git
 
-# Instagram scraping
-instaloader==4.15
+# PyTorch CPU (must come AFTER the index-url lines so pip resolves from whl/cpu)
+torch==2.1.2
+torchvision==0.16.2
 
+# Instagram data scraping
+instaloader==4.15
