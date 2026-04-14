@@ -8,25 +8,25 @@
 FROM node:20-bookworm-slim AS node_builder
 WORKDIR /app
 
-# Install deps
+# Install deps (includes devDeps needed for build: tsx, prisma, etc.)
 COPY package*.json ./
 RUN npm ci
 
 # Copy all source
 COPY . .
 
-# Flatten schema from PostgreSQL to SQLite (generates prisma/schema.render.prisma)
+# Flatten schema from PostgreSQL → SQLite
 RUN npx tsx scripts/flatten-schema.ts prisma/schema.prisma prisma/schema.render.prisma
 
 # Generate Prisma client for SQLite
 ENV DATABASE_URL=file:./dev.db
 RUN npx prisma generate --schema prisma/schema.render.prisma
 
-
 # Patch TypeScript types so build succeeds with SQLite string fields
 RUN chmod +x scripts/patch-prisma-types.sh && ./scripts/patch-prisma-types.sh
 
 # Build Next.js in standalone mode
+# Output: .next/standalone/ (self-contained with its own node_modules)
 RUN npm run build
 
 # =============================================================================
@@ -34,7 +34,7 @@ RUN npm run build
 # =============================================================================
 FROM python:3.10-slim-bookworm
 
-# Install Node.js 20 and system libraries needed by OpenCV / Tesseract
+# Install Node.js 20 and system libraries needed by OpenCV / Tesseract / CLIP
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
@@ -50,7 +50,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-
 WORKDIR /app
 
 # --- Python ML dependencies (CPU-only) ---
@@ -61,28 +60,32 @@ RUN pip install --no-cache-dir -r ./ml/requirements.txt
 COPY ml/ ./ml/
 
 # --- Copy Next.js standalone build output ---
-# Next.js standalone mode puts everything needed to run in .next/standalone/
-COPY --from=node_builder /app/.next/standalone ./
-COPY --from=node_builder /app/.next/static ./.next/static
-COPY --from=node_builder /app/public ./public
+# .next/standalone/ is a self-contained directory with:
+#   - server.js (the Next.js HTTP server)
+#   - node_modules/ (trimmed, production-only)
+#   - package.json
+# We copy it to /app/ so server.js lands at /app/server.js
+COPY --from=node_builder /app/.next/standalone /app/
+COPY --from=node_builder /app/.next/static /app/.next/static
+COPY --from=node_builder /app/public /app/public
 
-# --- Copy Prisma schema & scripts needed at runtime ---
-COPY --from=node_builder /app/prisma ./prisma
-COPY --from=node_builder /app/scripts/start-render.sh ./scripts/start-render.sh
-COPY --from=node_builder /app/scripts/flatten-schema.ts ./scripts/flatten-schema.ts
-COPY --from=node_builder /app/node_modules ./node_modules
+# --- Copy Prisma schema (needed for db push at runtime) ---
+COPY --from=node_builder /app/prisma /app/prisma
 
-# Make startup script executable and create storage dir
-RUN chmod +x ./scripts/start-render.sh && mkdir -p /app/storage
+# --- Copy scripts ---
+COPY --from=node_builder /app/scripts /app/scripts
+RUN chmod +x /app/scripts/start-render.sh
+
+# Create persistent storage dir for SQLite
+RUN mkdir -p /app/storage
 
 # Environment variables
 ENV NODE_ENV=production
 ENV PYTHONUNBUFFERED=1
 ENV DATABASE_URL=file:/app/storage/whoofy.db
 ENV ML_SERVICE_URL=http://localhost:8000
-ENV NODE_OPTIONS=--max-old-space-size=350
 ENV HOSTNAME=0.0.0.0
 
 EXPOSE 3000
 
-CMD ["./scripts/start-render.sh"]
+CMD ["/app/scripts/start-render.sh"]
