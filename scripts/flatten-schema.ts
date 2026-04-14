@@ -62,21 +62,50 @@ const processedLines = lines.map(line => {
   processed = processed.replace(/@@unique\(\[.*?\]\)/g, '');
   processed = processed.replace(/@@index\(\[.*?\]\)/g, '');
   
-  // Convert SCALAR arrays only (String[], Int[], etc.) to String
+  // Convert SCALAR arrays only (Type[]) to String
   // Relation arrays (Model[]) should remain arrays
-  const scalarTypes = ['String', 'Int', 'Float', 'Boolean', 'DateTime', 'Json'];
-  scalarTypes.forEach(type => {
-    const regex = new RegExp(`\\s${type}\\[\\]`, 'g');
-    processed = processed.replace(regex, ' String');
+  // We identify scalar arrays by checking if the type is a known scalar or an Enum
+  const lines = processed.split('\n');
+  const flattenedFields: string[] = [];
+  
+  const processedLines = lines.map(line => {
+    // Match: fieldName Type[] or fieldName Type[] @default(...)
+    const arrayMatch = line.match(/^\s+(\w+)\s+(\w+)\[\]/);
+    if (arrayMatch) {
+      const fieldName = arrayMatch[1];
+      const typeName = arrayMatch[2];
+      
+      // If it's NOT a relation (we'll check against known model names or manually skip if it's capitalized)
+      // Actually, in this project, relations are Model[] and scalars/enums are also Capitalized or Enum[]
+      // The best way is to check if it has @relation - if NOT, it's likely a scalar/enum array.
+      if (!line.includes('@relation')) {
+        flattenedFields.push(fieldName);
+        return line.replace(`${typeName}[]`, 'String');
+      }
+    }
+    return line;
   });
+  processed = processedLines.join('\n');
 
   // Convert Json to String
-  processed = processed.replace(/\sJson(\s|\?|$|@)/g, (match) => match.replace('Json', 'String'));
+  const jsonLines = processed.split('\n');
+  const processedJsonLines = jsonLines.map(line => {
+    // Match: fieldName Json or fieldName Json?
+    const jsonMatch = line.match(/^\s+(\w+)\s+Json/);
+    if (jsonMatch) {
+      flattenedFields.push(jsonMatch[1]);
+      return line.replace('Json', 'String');
+    }
+    return line;
+  });
+  processed = processedJsonLines.join('\n');
   
   // Handle defaults for converted types
   processed = processed.replace(/@default\(\[\]\)/g, '@default("")');
-  processed = processed.replace(/@default\("\[\]"\)/g, '@default("[]")');
-  processed = processed.replace(/@default\("\{\}"\)/g, '@default("{}")');
+  
+  // Save a list of flattened fields for the patcher (as a comment at top)
+  const flattenedList = Array.from(new Set(flattenedFields)).join(',');
+  processed = `// @@flattened:${flattenedList}\n` + processed;
   
   processed = processed.replace(/@db\.[A-Za-z]+/g, '');
   processed = processed.replace(/map: *".*?"/g, '');

@@ -6,60 +6,54 @@
 FROM node:20-bookworm-slim AS node_builder
 WORKDIR /app
 COPY package*.json ./
-# Add git and tsx for schema processing
-RUN apt-get update && apt-get install -y git && npm install -g tsx
 RUN npm ci
 COPY . .
-# 1. Flatten the schema for SQLite
-RUN npx tsx scripts/flatten-schema.ts prisma/schema.prisma prisma/schema.render.prisma
-# 2. Build Next.js (Standalone)
 ENV DATABASE_URL=file:./dev.db
 RUN npx prisma generate --schema prisma/schema.render.prisma
-# Patch types before building Next.js to avoid TS errors
+# Dynamic type patching for SQLite
 RUN chmod +x scripts/patch-prisma-types.sh && ./scripts/patch-prisma-types.sh
 RUN npm run build
 
-# --- Stage 2: Python ML Builder ---
-FROM python:3.10-slim-bookworm AS python_builder
-WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    git \
+# --- Stage 2: Final Runtime Image ---
+FROM python:3.10-slim-bookworm
+
+# Install Node.js 20 & Runtime Deps
+RUN apt-get update && apt-get install -y \
+    curl \
+    gnupg \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
-COPY ml/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY ml/ .
-
-# --- Stage 3: Final Runner (Lean) ---
-FROM node:20-bookworm-slim AS runner
-WORKDIR /app
-
-# Install only essential runtime libraries for ML (OpenCV/GL/Tesseract)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    libgl1-mesa-glx \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
     tesseract-ocr \
-    && rm -rf /var/lib/apt/lists/*
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Set ENV for Render
-ENV NODE_ENV=production
-ENV HOSTNAME="0.0.0.0"
-ENV DATABASE_URL="file:/app/storage/whoofy.db"
-ENV ML_SERVICE_URL="http://localhost:8000"
-ENV NODE_OPTIONS="--max-old-space-size=400"
-ENV PYTHONUNBUFFERED=1
+WORKDIR /app
 
-# Create app directory and storage
+# Copy Next.js Build
+COPY --from=node_builder /app/package*.json ./
+COPY --from=node_builder /app/.next ./.next
+COPY --from=node_builder /app/public ./public
+COPY --from=node_builder /app/node_modules ./node_modules
+COPY --from=node_builder /app/prisma ./prisma
+COPY --from=node_builder /app/scripts ./scripts
+COPY --from=node_builder /app/server.js ./server.js
+
+# Install Python ML Deps (CPU Only)
+COPY ml/requirements.txt ./ml/
+RUN pip install --no-cache-dir -r ml/requirements.txt
+COPY ml/ ./ml/
+
+# Create storage directory for SQLite
 RUN mkdir -p /app/storage
 
-# Copy Next.js Standalone
+# Env vars
+ENV NODE_ENV=production
+ENV DATABASE_URL=file:/app/storage/whoofy.db
+ENV ML_SERVICE_URL=http://localhost:8000
+ENV PORT=3000
+ENV PYTHONUNBUFFERED=1
+
 COPY --from=node_builder /app/.next/standalone ./
 COPY --from=node_builder /app/.next/static ./.next/static
 COPY --from=node_builder /app/public ./public

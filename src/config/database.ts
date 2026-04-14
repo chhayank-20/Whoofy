@@ -11,16 +11,6 @@ const basePrisma = new PrismaClient({
       : ['error'],
 });
 
-// List of fields that need transparent JSON parsing for SQLite
-const JSON_FIELDS = new Set([
-  'objects', 'labels', 'brands', 'people', 'textDetections', 'logos', 
-  'brandsDetected', 'targetBrandConfirmation', 'visualSentiment', 
-  'visualSimilaritySummary', 'captionSentiment', 'transcriptSentiment', 
-  'languages', 'regions', 'comments', 'brandMentions', 'niches', 
-  'overallIssues', 'commentAnalysis', 'engagementAnalysis', 'visualSimilarity',
-  'platforms', 'niche', 'interests', 'categories', 'requirements'
-]);
-
 /**
  * Helper to recursively parse JSON strings in objects
  */
@@ -35,15 +25,16 @@ function parseJsonFields(data: any): any {
   for (const key in result) {
     const value = result[key];
     
-    // If it's a known JSON field and it's a string, try to parse it
-    if (JSON_FIELDS.has(key) && typeof value === 'string') {
-      try {
-        if ((value.startsWith('[') && value.endsWith(']')) || 
-            (value.startsWith('{') && value.endsWith('}'))) {
+    // Dynamic JSON detection for SQLite strings
+    if (typeof value === 'string' && value.length > 1) {
+      if ((value.startsWith('[') && value.endsWith(']')) || 
+          (value.startsWith('{') && value.endsWith('}'))) {
+        try {
           result[key] = JSON.parse(value);
+        } catch (e) {
+          // Fallback to original value if parsing fails
+          // (e.g. if it's just a string that happens to start with [)
         }
-      } catch (e) {
-        // Fallback to original value if parsing fails
       }
     } else if (value && typeof value === 'object') {
       result[key] = parseJsonFields(value);

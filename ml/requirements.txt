@@ -1,20 +1,22 @@
+# Force CPU-only binaries to save RAM/Disk on Render
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 fastapi==0.115.8
 uvicorn[standard]==0.34.0
 
 # Pin NumPy to 1.x so PyTorch / Ultralytics
 # C-extensions are compiled against a compatible version.
-# (NumPy 2.x is causing "Numpy is not available" / ABI errors.)
 numpy==1.26.4
 
-# Core OCR + YOLO deps (match existing yolo/requirements*.txt intent)
+# Core OCR + YOLO deps
 ultralytics>=8.0.0
 opencv-python-headless>=4.8.0
 pytesseract>=0.3.10
 pillow>=10.0.0
 
-# CLIP deps (using standard PyPI for better ARM64/Mac compatibility)
-torch>=2.1.2
-torchvision>=0.16.2
+# CLIP deps (using CPU-only torch)
+torch>=2.1.2+cpu
+torchvision>=0.16.2+cpu
 ftfy>=6.0.0
 git+https://github.com/openai/CLIP.git
 
