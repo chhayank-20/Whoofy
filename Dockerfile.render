@@ -1,40 +1,52 @@
-# Dockerfile.render
-# Two-stage build: Node.js builder + Python runtime with Node.js installed
-# Uses SQLite to stay within Render Free Tier 512MB RAM limit
+# Dockerfile.render — Whoofy on Render Free Tier
+#
+# Architecture:
+#   Stage 1 (node_builder): Full Node.js build — Next.js standalone + Prisma CLI extracted
+#   Stage 2 (runtime): Python 3.10 slim + Node.js 20 installed + ML deps
+#
+# Key design decisions:
+#   - No public/ directory in this project, so we skip that COPY
+#   - Next.js standalone embeds its own trimmed node_modules (no full copy needed)
+#   - Prisma CLI binary is extracted from builder and placed at /app/prisma-cli
+#     so we can run db push at startup without the full node_modules
+#   - yolov8n.pt and yolo/ are excluded via .dockerignore to save 6MB+ on each layer
 
 # =============================================================================
-# Stage 1: Node.js builder — builds Next.js app
+# Stage 1: Node.js builder
 # =============================================================================
 FROM node:20-bookworm-slim AS node_builder
 WORKDIR /app
 
-# Install deps (includes devDeps needed for build: tsx, prisma, etc.)
 COPY package*.json ./
 RUN npm ci
 
-# Copy all source
 COPY . .
 
-# Flatten schema from PostgreSQL → SQLite
+# Flatten PostgreSQL schema → SQLite
 RUN npx tsx scripts/flatten-schema.ts prisma/schema.prisma prisma/schema.render.prisma
 
-# Generate Prisma client for SQLite
+# Generate Prisma Client for SQLite
 ENV DATABASE_URL=file:./dev.db
 RUN npx prisma generate --schema prisma/schema.render.prisma
 
-# Patch TypeScript types so build succeeds with SQLite string fields
+# Patch TypeScript types to allow array/Decimal fields (SQLite compat)
 RUN chmod +x scripts/patch-prisma-types.sh && ./scripts/patch-prisma-types.sh
 
-# Build Next.js in standalone mode
-# Output: .next/standalone/ (self-contained with its own node_modules)
+# Build Next.js standalone
+# Output: .next/standalone/ (self-contained, with trimmed node_modules)
 RUN npm run build
 
 # =============================================================================
-# Stage 2: Final runtime — Python base + Node.js installed on top
+# Stage 2: Runtime image
 # =============================================================================
 FROM python:3.10-slim-bookworm
 
-# Install Node.js 20 and system libraries needed by OpenCV / Tesseract / CLIP
+# System deps:
+#   - git: for pip to clone CLIP from GitHub
+#   - libgl1, libglib2.0-0, libsm6, etc.: OpenCV runtime
+#   - libgomp1: OpenMP (PyTorch)
+#   - tesseract-ocr: OCR for pytesseract
+#   - curl + gnupg: for NodeSource setup
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
@@ -52,34 +64,37 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# --- Python ML dependencies (CPU-only) ---
-COPY ml/requirements.txt ./ml/requirements.txt
-RUN pip install --no-cache-dir -r ./ml/requirements.txt
+# Install Python ML deps (CPU-only torch via --index-url)
+COPY ml/requirements.txt /tmp/ml-requirements.txt
+RUN pip install --no-cache-dir -r /tmp/ml-requirements.txt
 
-# --- Copy ML source ---
-COPY ml/ ./ml/
+# Copy ML application source
+COPY ml/ /app/ml/
 
-# --- Copy Next.js standalone build output ---
-# .next/standalone/ is a self-contained directory with:
-#   - server.js (the Next.js HTTP server)
-#   - node_modules/ (trimmed, production-only)
-#   - package.json
-# We copy it to /app/ so server.js lands at /app/server.js
+# Copy Next.js standalone build
+# .next/standalone/ contains: server.js, node_modules/ (trimmed), package.json
 COPY --from=node_builder /app/.next/standalone /app/
+# Static assets (CSS/JS chunks) — must be at .next/static/ relative to server.js
 COPY --from=node_builder /app/.next/static /app/.next/static
-COPY --from=node_builder /app/public /app/public
 
-# --- Copy Prisma schema (needed for db push at runtime) ---
+# Copy Prisma schemas (both original + flattened) + generated client
+# The generated client is inside node_modules/@prisma/client (included in standalone)
 COPY --from=node_builder /app/prisma /app/prisma
 
-# --- Copy scripts ---
-COPY --from=node_builder /app/scripts /app/scripts
+# Extract the Prisma CLI binary so we can run db push at startup
+# without needing the full node_modules
+COPY --from=node_builder /app/node_modules/.bin/prisma /app/prisma-cli/prisma
+COPY --from=node_builder /app/node_modules/prisma /app/prisma-cli/node_modules/prisma
+COPY --from=node_builder /app/node_modules/@prisma /app/prisma-cli/node_modules/@prisma
+
+# Copy startup scripts
+COPY --from=node_builder /app/scripts/start-render.sh /app/scripts/start-render.sh
 RUN chmod +x /app/scripts/start-render.sh
 
-# Create persistent storage dir for SQLite
+# Create SQLite storage directory
 RUN mkdir -p /app/storage
 
-# Environment variables
+# Runtime environment
 ENV NODE_ENV=production
 ENV PYTHONUNBUFFERED=1
 ENV DATABASE_URL=file:/app/storage/whoofy.db

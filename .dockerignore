@@ -20,3 +20,6 @@ __pycache__
 .pytest_cache
 .mypy_cache
 
+# Large model files — downloaded at runtime if needed
+yolov8n.pt
+yolo/
